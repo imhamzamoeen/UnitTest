@@ -1,0 +1,141 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Transaction;
+use App\Models\User;
+use App\Presenters\TokenPresenter;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\WithFaker;
+use Illuminate\Support\Arr;
+use Tests\TestCase;
+
+class IesTransactionTest extends TestCase
+{
+
+/* Notes 
+the response is object of https://laravel.com/api/8.x/Illuminate/Testing/TestResponse.html so we can check the function also $this has some function 
+we can set env.testing and here this env will be used in the testing, as we have a seperate database for testing purpose
+*/
+// unit test is to test a unit of a code , a helper function of a code
+// a feature test is to test a proper feature like transaction feature , it will include all kind of crud etc
+
+    use RefreshDatabase, TokenPresenter;  
+// the refreshdatabase trait is to refresh the database like migrate fresh, rollback after each funciton of a test
+  // this token presenter is to give back a jwt to user  
+
+    private function generateUserAndReturnToken(): array
+    {
+      // we use factories in test to generate random data for the database
+        $user = User::factory()->create();
+        if (!$user) {
+            $this->fail('No user exists in the database.');
+        }
+      // set this user to be logged in user for this test
+        $this->actingAs($user);
+        [$token, $time] = $this->generateToken($user);
+        return [$user, $token];
+    }
+    /**
+     * A basic feature test example.
+     */
+    public function test_iesTransaction_index(): void
+    {
+        list($user, $token) = $this->generateUserAndReturnToken();
+        // Make the request with the Authorization header we got from the above function 
+        $response  = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $token,
+        ])->get('/transaction');
+
+        $this->assertEquals('OK', $response['message']);  // check that response array's message key is = "OK"
+        $this->assertArrayHasKey('items', $response);   // check that  response has key item
+        $response->assertStatus(200);  // check that it returned a status ok
+        $response->assertJsonStructure([
+            'items' => [
+                '*' => [
+                    'id', 'transactionType', 'accountType', 'accountId', 'customerId', 'supplierId',
+                    'amount', 'expense', 'payeeName', 'payeeAccountNumber', 'description',
+                    'status', 'transactionDate', 'actionDate', 'actionBy',
+                ]
+            ]
+        ]);
+    }
+
+    public function test_iesTransaction_show(): void
+    {
+        list($user, $token) = $this->generateUserAndReturnToken();
+        // Make the request with the Authorization header
+
+        $trnsaction = Transaction::factory()->count(10)->create();
+        $trnsaction = Transaction::inRandomOrder()->first();
+        if (blank($trnsaction)) {
+            $this->fail('There is no transaction in the database.');
+        }
+        $response  = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $token,
+        ])->get("/transaction/{$trnsaction->getKey()}");
+        $this->assertArrayHasKey('item', $response);
+        $this->assertIsArray($response['item']);
+        $this->assertEquals('OK', $response['message']);
+        $response->assertOk();
+    }
+
+    public function test_iesTransaction_store(): void
+    {
+
+        list($user, $token) = $this->generateUserAndReturnToken();
+        // Make the request with the Authorization header
+
+
+        $transactionData = Transaction::factory()->make()->toArray();
+        $response  = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $token,
+        ])->post('/transaction', Arr::except($transactionData, ['id', 'createdAt', "updatedAt"]));
+        $response->assertStatus(200);
+        $this->assertDatabaseHas('transactions', Arr::except($transactionData, ['id', 'createdAt', "updatedAt"]));    /// check that the second argument exist in the database with being the first argument as the table name
+    }
+
+
+    public function test_iesTransaction_update(): void
+    {
+        list($user, $token) = $this->generateUserAndReturnToken();
+
+        $transaction = Transaction::factory()->create();
+        $updatedData = [
+            'amount' => 1000,
+            'expense' => 10,
+        ];
+
+        $response  = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $token,
+        ])->put('/transaction/' . $transaction->id, $updatedData);
+
+        $response->assertStatus(200);
+        $this->assertEquals('Updated', $response['message']);
+        $response->assertExactJson([   // check the retured response is same as what i am declaring here
+            "size" => 1,
+            "status" => 200,
+            "message" => "Updated",
+            "items" => [
+                "documentId" => $transaction->id,
+                "success" => true
+            ]
+
+        ]);
+        $this->assertDatabaseHas('transactions', $updatedData);
+    }
+
+    public function test_iesTransaction_delete(): void
+    {
+        list($user, $token) = $this->generateUserAndReturnToken();
+
+
+        $transaction = Transaction::factory()->create();
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $token,
+        ])->delete('/transaction/' . $transaction->id);
+        $response->assertStatus(201);
+        $this->assertEquals('OK', $response['message']);
+    }
+}
