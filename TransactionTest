@@ -16,6 +16,8 @@ class IesTransactionTest extends TestCase
 /* Notes 
 the response is object of https://laravel.com/api/8.x/Illuminate/Testing/TestResponse.html so we can check the function also $this has some function 
 we can set env.testing and here this env will be used in the testing, as we have a seperate database for testing purpose
+For api we can use postjosn and getjson etc method. they just add header like accpet content type json so then we can see response according to that like assertjson([])
+check that my given array is subset of response array
 */
 // unit test is to test a unit of a code , a helper function of a code
 // a feature test is to test a proper feature like transaction feature , it will include all kind of crud etc
